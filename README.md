@@ -40,11 +40,8 @@ npm run test:report     # open the HTML report
 ## Test suites
 
 - `tests/login.spec.ts` — valid + invalid login flow
-- `tests/account.spec.ts` — account page renders balance
-- `tests/transactions.spec.ts` — credit, debit, insufficient-funds error
-- `tests/google-search.spec.ts` — searches Google for "playwright end to end testing", validates a `playwright.dev` link appears (skips on Google CAPTCHA), with DuckDuckGo fallback
+- `tests/google-search.spec.ts` — external search validation via Wikipedia (10 parallel runs)
 
 ## Notes
 
 - In-memory storage in the backend: balances reset on backend restart.
-- Google may throw a consent dialog or unusual-traffic page; the test handles consent and skips on CAPTCHA. The DuckDuckGo fallback verifies the same intent more reliably.
