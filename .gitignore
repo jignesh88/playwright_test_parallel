@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build output
+backend/dist/
+frontend/dist/
+frontend/dist-ssr/
+*.tsbuildinfo
+
+# Playwright
+playwright-report/
+playwright/.cache/
+test-results/
+blob-report/
+.last-run.json
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+
+# Coverage / caches
+coverage/
+.nyc_output/
+.cache/
