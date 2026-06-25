@@ -10,7 +10,7 @@ test.describe('External search validation', () => {
     locale: 'en-US',
   });
 
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 1; i <= 1000; i++) {
     test(`Wikipedia confirms Playwright is an automation framework [run ${i}]`, async ({ page }) => {
       await page.goto('https://en.wikipedia.org/wiki/Playwright_(software)', {
         waitUntil: 'domcontentloaded',
