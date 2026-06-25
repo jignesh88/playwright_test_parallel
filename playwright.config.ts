@@ -9,24 +9,27 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: 'http://localhost:5273',
+    headless: true,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
-  webServer: [
-    {
-      command: 'npm --prefix backend run dev',
-      port: 4100,
-      reuseExistingServer: !process.env.CI,
-      timeout: 60_000,
-    },
-    {
-      command: 'npm --prefix frontend run dev',
-      port: 5273,
-      reuseExistingServer: !process.env.CI,
-      timeout: 60_000,
-    },
-  ],
+  webServer: process.env.SKIP_WEB_SERVER
+    ? undefined
+    : [
+        {
+          command: 'npm --prefix backend run dev',
+          port: 4100,
+          reuseExistingServer: !process.env.CI,
+          timeout: 60_000,
+        },
+        {
+          command: 'npm --prefix frontend run dev',
+          port: 5273,
+          reuseExistingServer: !process.env.CI,
+          timeout: 60_000,
+        },
+      ],
 });
