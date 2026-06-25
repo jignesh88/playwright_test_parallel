@@ -24,6 +24,7 @@ npm run dev:backend   # in one terminal
 npm run dev:frontend  # in another
 ```
 
+
 Open http://localhost:5273 and log in with `demo` / `password123`.
 
 ## Run Playwright tests
