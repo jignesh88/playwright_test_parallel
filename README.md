@@ -164,6 +164,18 @@ docker load -i allure-report-image.tar
 docker run --rm -p 8081:80 retailflow/allure-report:local
 ```
 
+## Claude skills
+
+Reusable project-scoped skills live under `.claude/skills/`. Each one is a markdown file the Claude Code harness loads when you invoke it; together they encode the conventions in this repo so you can replicate them in other projects.
+
+| Skill | What it covers |
+|-------|----------------|
+| [`playwright-pom-bdd`](.claude/skills/playwright-pom-bdd/SKILL.md) | Framework bootstrap: directory layout, page objects, fixtures, BDD layer reusing the same objects, two-config pattern, parallelism gotchas. |
+| [`allure-docker-reports`](.claude/skills/allure-docker-reports/SKILL.md) | Allure reporter wiring, multi-stage Docker image, nginx config, staging/extract scripts, 7-day rolling history, GitHub Actions matrix + cache. |
+| [`squad-ownership`](.claude/skills/squad-ownership/SKILL.md) | Single `SQUADS` table, `tagSuite()`/BDD `Before()` mapping, Allure owner/tag/parameter, "add a feature = one row" workflow. |
+
+Invoke with `/playwright-pom-bdd`, `/allure-docker-reports`, `/squad-ownership` from any session opened in this repo. To use in another repo, copy the relevant `.claude/skills/<name>/` directory across.
+
 ## Design principles
 
 - **SRP** — one page object per screen, one step file per domain.
