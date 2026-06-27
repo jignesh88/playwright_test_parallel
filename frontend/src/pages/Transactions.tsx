@@ -1,16 +1,15 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { createTransaction, getTransactions } from '../api';
-
-type Transaction = {
-  id: string;
-  type: 'credit' | 'debit';
-  amount: number;
-  description: string;
-  date: string;
-  balanceAfter: number;
-};
+import {
+  BankAccount,
+  Transaction,
+  createTransaction,
+  getAccounts,
+  getTransactions,
+} from '../api';
 
 export default function Transactions() {
+  const [accounts, setAccounts] = useState<BankAccount[]>([]);
+  const [accountId, setAccountId] = useState('');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [type, setType] = useState<'credit' | 'debit'>('credit');
   const [amount, setAmount] = useState('');
@@ -19,8 +18,10 @@ export default function Transactions() {
   const [success, setSuccess] = useState('');
 
   async function refresh() {
-    const data = await getTransactions();
-    setTransactions(data.transactions);
+    const [a, t] = await Promise.all([getAccounts(), getTransactions()]);
+    setAccounts(a.accounts);
+    setTransactions(t.transactions);
+    if (!accountId && a.accounts[0]) setAccountId(a.accounts[0].id);
   }
 
   useEffect(() => {
@@ -33,6 +34,7 @@ export default function Transactions() {
     setSuccess('');
     try {
       const result = await createTransaction({
+        accountId,
         type,
         amount: Number(amount),
         description,
@@ -51,6 +53,19 @@ export default function Transactions() {
       <div className="card">
         <h1>New Transaction</h1>
         <form onSubmit={handleSubmit}>
+          <label htmlFor="account">Account</label>
+          <select
+            id="account"
+            data-testid="tx-account"
+            value={accountId}
+            onChange={(e) => setAccountId(e.target.value)}
+          >
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} (${a.balance.toFixed(2)})
+              </option>
+            ))}
+          </select>
           <label htmlFor="type">Type</label>
           <select
             id="type"

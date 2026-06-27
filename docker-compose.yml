@@ -1,0 +1,10 @@
+services:
+  allure-report:
+    build:
+      context: .
+      dockerfile: docker/allure-report.Dockerfile
+    image: retailflow/allure-report:local
+    container_name: retailflow-allure-report
+    ports:
+      - "${ALLURE_REPORT_PORT:-8081}:80"
+    restart: unless-stopped

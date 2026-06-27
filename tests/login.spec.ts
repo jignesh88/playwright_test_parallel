@@ -1,21 +1,24 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
+import { DEMO_USER } from './support/testData';
+import { tagSuite } from './support/allure';
 
 test.describe('Login', () => {
-  test('rejects bad credentials', async ({ page }) => {
-    await page.goto('/login');
-    await page.getByTestId('username').fill('demo');
-    await page.getByTestId('password').fill('wrong-password');
-    await page.getByTestId('login-submit').click();
-    await expect(page.getByTestId('login-error')).toContainText(/invalid/i);
+  tagSuite({ epic: 'Banking', feature: 'Authentication', severity: 'blocker' });
+
+  test('rejects bad credentials', async ({ loginPage }) => {
+    await loginPage.goto();
+    await loginPage.signIn(DEMO_USER.username, 'wrong-password');
+    await loginPage.expectError(/invalid/i);
   });
 
-  test('logs in with valid credentials and lands on account page', async ({ page }) => {
-    await page.goto('/login');
-    await page.getByTestId('username').fill('demo');
-    await page.getByTestId('password').fill('password123');
-    await page.getByTestId('login-submit').click();
+  test('logs in with valid credentials and lands on account page', async ({
+    loginPage,
+    accountPage,
+    page,
+  }) => {
+    await loginPage.goto();
+    await loginPage.signIn(DEMO_USER.username, DEMO_USER.password);
     await expect(page).toHaveURL(/\/account$/);
-    await expect(page.getByTestId('account-name')).toHaveText('Demo User');
-    await expect(page.getByTestId('account-balance')).toBeVisible();
+    await accountPage.expectLoaded(DEMO_USER.fullName);
   });
 });

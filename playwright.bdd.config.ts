@@ -1,25 +1,32 @@
 import { defineConfig, devices } from '@playwright/test';
+import { defineBddProject } from 'playwright-bdd';
+
+const bddProject = defineBddProject({
+  name: 'bdd',
+  features: 'features/**/*.feature',
+  steps: 'tests/steps/**/*.ts',
+  outputDir: 'tests/.features-gen',
+});
 
 export default defineConfig({
-  testDir: './tests',
-  testIgnore: ['**/.features-gen/**', '**/steps/**', '**/pages/**', '**/support/**'],
   fullyParallel: true,
-  workers: process.env.CI ? 10 : 10,
+  workers: process.env.CI ? 4 : 4,
   retries: process.env.CI ? 1 : 0,
   forbidOnly: !!process.env.CI,
   reporter: [
     ['list'],
-    ['html', { open: 'never' }],
+    ['html', { open: 'never', outputFolder: 'playwright-report-bdd' }],
     [
       'allure-playwright',
       {
-        resultsDir: 'allure-results',
+        resultsDir: 'allure-results-bdd',
         detail: true,
         suiteTitle: false,
         environmentInfo: {
           node: process.version,
           os: process.platform,
           ci: process.env.CI ? 'true' : 'false',
+          framework: 'playwright-bdd',
         },
       },
     ],
@@ -33,19 +40,7 @@ export default defineConfig({
   },
   projects: [
     {
-      name: 'app',
-      testIgnore: [
-        '**/google-search.spec.ts',
-        '**/.features-gen/**',
-        '**/steps/**',
-        '**/pages/**',
-        '**/support/**',
-      ],
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: 'external',
-      testMatch: ['**/google-search.spec.ts'],
+      ...bddProject,
       use: { ...devices['Desktop Chrome'] },
     },
   ],
