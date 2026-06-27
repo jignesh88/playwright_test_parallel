@@ -94,6 +94,39 @@ npm run allure:generate && npm run allure:open
 
 The Allure report tree is grouped by `epic / feature / severity`. POM specs use the `tagSuite()` helper (`tests/support/allure.ts`); BDD scenarios get the same labels from Gherkin tags.
 
+### Squad ownership
+
+Every test carries the squad that owns its feature. `tests/support/squads.ts` is the single source of truth:
+
+```ts
+SQUADS = {
+  identity: { name: 'Identity Squad', email: 'identity@retailflow.example' },
+  money:    { name: 'Money Movement', email: 'money@retailflow.example' },
+  lending:  { name: 'Lending Squad',  email: 'lending@retailflow.example' },
+  platform: { name: 'Platform Squad', email: 'platform@retailflow.example' },
+};
+
+FEATURE_OWNERSHIP = {
+  Authentication: 'identity',
+  Accounts:       'money',
+  Transfers:      'money',
+  Payments:       'money',
+  Settings:       'platform',
+  Loans:          'lending',
+};
+```
+
+`tagSuite()` (POM) and the BDD `Before()` hook look up the squad from the feature name and auto-attach:
+
+| Attached value                                  | Where it shows up                               |
+|-------------------------------------------------|-------------------------------------------------|
+| `allure.owner = <Squad name>`                   | Allure **Owners** view groups tests per squad   |
+| `allure.tag('squad:<id>')`                      | Filterable from the Allure UI                   |
+| `allure.parameter('squadEmail', ...)`           | Visible on the test detail page                 |
+| Playwright annotation `{ type: 'squad', ... }`  | Playwright HTML report + `TestCase.annotations` |
+
+**Adding a feature**: add one row to `FEATURE_OWNERSHIP` (and a squad to `SQUADS` if needed). No spec edits required — the feature name already passed to `tagSuite()` / `@feature:<Name>` flows ownership through.
+
 ### Docker-served reports (per-suite, with 7-day trends)
 
 A multi-stage image generates per-suite Allure HTML and serves it via nginx at `/reports/{app,bdd,external}`.
