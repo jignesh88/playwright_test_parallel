@@ -1,0 +1,6 @@
+# The Allure report image only needs: docker/ + the staged results.
+# Everything else is dead weight in the build context.
+**
+
+!docker/
+!docker/staging/

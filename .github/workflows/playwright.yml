@@ -48,11 +48,20 @@ jobs:
         run: npx playwright install-deps chromium
 
       - name: Run Playwright tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
-        run: npx playwright test tests/google-search.spec.ts --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        run: npx playwright test --project=external --shard=${{ matrix.shard }}/${{ strategy.job-total }}
         env:
           CI: 'true'
           PLAYWRIGHT_HEADLESS: '1'
           SKIP_WEB_SERVER: '1'
+
+      - name: Upload allure-results (external suite)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-external-shard-${{ matrix.shard }}
+          path: allure-results/
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Upload HTML report
         if: ${{ !cancelled() }}
@@ -68,4 +77,81 @@ jobs:
         with:
           name: playwright-traces-shard-${{ matrix.shard }}
           path: test-results/
+          retention-days: 7
+
+  report-image:
+    name: Build Allure report Docker image
+    needs: test
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all allure-results artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          pattern: allure-results-*
+
+      - name: Compute history cache date (rolling 7-day window)
+        id: hist
+        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Allure history (7-day rolling window)
+        uses: actions/cache@v4
+        with:
+          path: docker/history
+          # Save key includes today's date so each day writes a fresh entry;
+          # restore-keys allows reuse of any entry from the past week.
+          key: allure-history-${{ steps.hist.outputs.date }}
+          restore-keys: |
+            allure-history-
+
+      - name: Merge shards into allure-results-{app,bdd,external}
+        run: |
+          set -euo pipefail
+          mkdir -p allure-results allure-results-bdd allure-results-external
+          shopt -s nullglob
+          for dir in artifacts/allure-results-external-shard-*; do
+            cp -R "$dir"/. allure-results-external/
+          done
+          for dir in artifacts/allure-results-app-shard-*; do
+            cp -R "$dir"/. allure-results/
+          done
+          for dir in artifacts/allure-results-bdd-shard-*; do
+            cp -R "$dir"/. allure-results-bdd/
+          done
+          echo "Merged counts:"
+          ls allure-results          2>/dev/null | wc -l
+          ls allure-results-bdd      2>/dev/null | wc -l
+          ls allure-results-external 2>/dev/null | wc -l
+
+      - name: Stage results for Docker build
+        run: bash docker/stage-results.sh
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build report image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/allure-report.Dockerfile
+          tags: retailflow/allure-report:local
+          load: true
+          push: false
+
+      - name: Export image to tarball
+        run: docker save retailflow/allure-report:local -o /tmp/allure-report-image.tar
+
+      - name: Extract fresh history for next run's cache
+        env:
+          ALLURE_REPORT_IMAGE: retailflow/allure-report:local
+        run: bash docker/extract-history.sh
+
+      - name: Upload report image tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report-image
+          path: /tmp/allure-report-image.tar
           retention-days: 7

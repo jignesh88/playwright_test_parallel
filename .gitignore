@@ -11,10 +11,28 @@ frontend/dist-ssr/
 
 # Playwright
 playwright-report/
+playwright-report-bdd/
 playwright/.cache/
 test-results/
 blob-report/
 .last-run.json
+
+# playwright-bdd generated specs
+tests/.features-gen/
+
+# Allure
+allure-results/
+allure-results-bdd/
+allure-results-external/
+allure-report/
+allure-report-bdd/
+allure-report-external/
+
+# Docker build staging
+docker/staging/
+
+# Allure history persisted between Docker builds (7-day rolling)
+docker/history/
 
 # Environment
 .env
