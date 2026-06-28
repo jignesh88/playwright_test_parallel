@@ -26,7 +26,8 @@
     "report:docker:build": "npm run report:docker:stage && docker compose build allure-report && bash docker/extract-history.sh",
     "report:docker:up": "docker compose up -d allure-report",
     "report:docker:down": "docker compose down",
-    "report:docker:logs": "docker compose logs -f allure-report"
+    "report:docker:logs": "docker compose logs -f allure-report",
+    "report:failures": "tsx scripts/squad-failure-report.ts allure-results allure-results-bdd allure-results-external"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
@@ -34,6 +35,7 @@
     "allure-playwright": "^3.10.2",
     "concurrently": "^9.0.1",
     "playwright-bdd": "^9.2.0",
-    "rimraf": "^6.1.3"
+    "rimraf": "^6.1.3",
+    "tsx": "^4.22.4"
   }
 }

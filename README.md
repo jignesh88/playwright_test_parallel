@@ -177,6 +177,22 @@ FEATURE_OWNERSHIP = {
 
 **Adding a feature**: add one row to `FEATURE_OWNERSHIP` (and a squad to `SQUADS` if needed). No spec edits required — the feature name already passed to `tagSuite()` / `@feature:<Name>` flows ownership through.
 
+### Failure notifications
+
+When CI fails, the `failure-report` job runs `scripts/squad-failure-report.ts` against the merged `allure-results-*` artifacts, groups failing tests by `owner` label, and posts a Markdown table:
+
+- To the workflow **job summary** (every failed run — visible on the GitHub run page).
+- To the **PR comment** thread (only on `pull_request` runs).
+- To **Slack** if `secrets.SLACK_WEBHOOK_URL` is set (opt-in per repo).
+
+Locally you can preview the same report:
+
+```bash
+npm run report:failures            # reads allure-results, allure-results-bdd, allure-results-external
+```
+
+The script exits 0 even when there are failures — it's a reporter, not a gate. The test jobs already failed and decide pass/fail.
+
 ### Docker-served reports (per-suite, with 7-day trends)
 
 A multi-stage image generates per-suite Allure HTML and serves it via nginx at `/reports/{app,bdd,external}`.
