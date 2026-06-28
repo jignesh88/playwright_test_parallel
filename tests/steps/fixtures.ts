@@ -9,7 +9,7 @@ import {
   PaymentsPage,
   LoansPage,
 } from '../pages';
-import { DEMO_USER } from '../support/testData';
+import { DEMO_USER, seedFor } from '../support/testData';
 import { squadForFeature } from '../support/squads';
 
 type BddPageObjects = {
@@ -21,6 +21,7 @@ type BddPageObjects = {
   paymentsPage: PaymentsPage;
   loansPage: LoansPage;
   signInAsDemo: () => Promise<void>;
+  signInAsFreshUser: () => Promise<void>;
 };
 
 export const test = base.extend<BddPageObjects>({
@@ -36,6 +37,24 @@ export const test = base.extend<BddPageObjects>({
       await loginPage.goto();
       await loginPage.signIn(DEMO_USER.username, DEMO_USER.password);
       await page.waitForURL(/\/account$/);
+    });
+  },
+  signInAsFreshUser: async ({ page, request }, use, testInfo) => {
+    await use(async () => {
+      const seed = seedFor(testInfo);
+      const res = await request.post('/api/_test/users', { data: seed });
+      if (!res.ok()) {
+        throw new Error(`POST /api/_test/users failed: ${res.status()} ${await res.text()}`);
+      }
+      const user = (await res.json()) as { token: string; fullName: string };
+      await page.addInitScript(
+        ([token, fullName]) => {
+          localStorage.setItem('token', token);
+          localStorage.setItem('fullName', fullName);
+        },
+        [user.token, user.fullName]
+      );
+      await page.goto('/account');
     });
   },
 });

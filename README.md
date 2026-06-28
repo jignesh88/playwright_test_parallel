@@ -62,9 +62,30 @@ npm run test:all        # both projects
 
 Design rules:
 - One **page object** per screen under `tests/pages/`. Selectors (`data-testid`) live **only** here.
-- A `tests/fixtures.ts` extends Playwright's `test` with page-object fixtures + an `authedPage` fixture that signs in the demo user once per test.
+- A `tests/fixtures.ts` extends Playwright's `test` with page-object fixtures + two auth fixtures:
+  - `authedPage` — signs in as the shared `demo` user. Kept for back-compat.
+  - `freshPage` / `freshUser` — mints an ephemeral user per test via `POST /api/_test/users`. **Use this for new tests.**
 - Shared test data (demo credentials, seed account names) lives in `tests/support/testData.ts`.
 - Specs reference page objects, never `data-testid` directly.
+
+### Per-test backend isolation
+
+The in-memory backend is shared across all workers, so two tests using the same user can step on each other (settings race, balance drain). The `freshPage` / `freshUser` fixtures eliminate this: each test gets its own user with seeded checking + savings accounts.
+
+```ts
+test('user can enable SMS and persist it', async ({ freshPage, settingsPage }) => {
+  void freshPage;        // logged in as a fresh user; localStorage primed
+  await settingsPage.goto();
+  // ...
+});
+```
+
+Mechanics:
+- `seedFor(testInfo)` hashes the test's title path to a stable-but-unique username, so retries reuse the same user (cleaner Allure history) while parallel tests never collide.
+- `POST /api/_test/users` is only mounted when `NODE_ENV !== 'production'`.
+- BDD scenarios opt in with `Given I am signed in as a fresh user` (the existing `Given I am signed in as the demo user` step is unchanged).
+
+Migration of remaining specs from `authedPage` → `freshPage` is incremental — change one spec at a time when its flakiness earns the swap.
 
 ### BDD (playwright-bdd)
 
