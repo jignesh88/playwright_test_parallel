@@ -9,6 +9,10 @@ Given('I am signed in as the demo user', async ({ signInAsDemo }) => {
   await signInAsDemo();
 });
 
+Given('I am signed in as a fresh user', async ({ signInAsFreshUser }) => {
+  await signInAsFreshUser();
+});
+
 When('I sign in as {string} with password {string}', async ({ loginPage }, username: string, password: string) => {
   await loginPage.signIn(username, password);
 });

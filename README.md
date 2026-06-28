@@ -62,27 +62,30 @@ npm run test:all        # both projects
 
 Design rules:
 - One **page object** per screen under `tests/pages/`. Selectors (`data-testid`) live **only** here.
-- A `tests/fixtures.ts` extends Playwright's `test` with page-object fixtures + an `authedPage` fixture that signs in the demo user once per test.
+- A `tests/fixtures.ts` extends Playwright's `test` with page-object fixtures + two auth fixtures:
+  - `authedPage` — signs in as the shared `demo` user. Kept for back-compat.
+  - `freshPage` / `freshUser` — mints an ephemeral user per test via `POST /api/_test/users`. **Use this for new tests.**
 - Shared test data (demo credentials, seed account names) lives in `tests/support/testData.ts`.
 - Specs reference page objects, never `data-testid` directly.
 
-### Artifacts on failure: traces always, videos on smoke only
+### Per-test backend isolation
 
-Defaults across both configs: `trace: 'retain-on-failure'`, `screenshot: 'only-on-failure'`, **`video: 'off'`**. Traces give equivalent forensic detail at a fraction of the size — at 1000 tests with even a 1% real-fail rate, video webms would add ~500 MB per CI run.
-
-To opt a spec into video capture, call `markSmoke()` at **file top** (Playwright requires the video override at module scope because it forces a new worker):
+The in-memory backend is shared across all workers, so two tests using the same user can step on each other (settings race, balance drain). The `freshPage` / `freshUser` fixtures eliminate this: each test gets its own user with seeded checking + savings accounts.
 
 ```ts
-import { markSmoke } from './support/smoke';
-markSmoke();                              // file-top, before any describe
-
-test.describe('Login', () => {
-  tagSuite({ epic: 'Banking', feature: 'Authentication', severity: 'blocker' });
-  // tests...
+test('user can enable SMS and persist it', async ({ freshPage, settingsPage }) => {
+  void freshPage;        // logged in as a fresh user; localStorage primed
+  await settingsPage.goto();
+  // ...
 });
 ```
 
-`markSmoke()` also adds a `@smoke` Allure tag + Playwright annotation, so smoke tests are filterable in the report and via `--grep`. The BDD suite has no per-test video toggle (context creation timing); traces cover it.
+Mechanics:
+- `seedFor(testInfo)` hashes the test's title path to a stable-but-unique username, so retries reuse the same user (cleaner Allure history) while parallel tests never collide.
+- `POST /api/_test/users` is only mounted when `NODE_ENV !== 'production'`.
+- BDD scenarios opt in with `Given I am signed in as a fresh user` (the existing `Given I am signed in as the demo user` step is unchanged).
+
+Migration of remaining specs from `authedPage` → `freshPage` is incremental — change one spec at a time when its flakiness earns the swap.
 
 ### BDD (playwright-bdd)
 
@@ -203,10 +206,17 @@ npm run report:docker:logs
 
 ## CI
 
-`.github/workflows/playwright.yml`:
-- Test matrix runs the `external` project across 10 shards, uploading per-shard `allure-results-external-shard-N` artifacts.
-- A downstream `report-image` job merges shards, stages results, builds the Allure-report Docker image, and uploads the image as an `allure-report-image` tarball artifact (7-day retention).
-- Allure trend history persists across pipeline runs via `actions/cache` on `docker/history/`.
+`.github/workflows/playwright.yml` runs three independent test matrices in parallel, then builds a single Allure report image from their combined results:
+
+| Job             | Project    | Shards | Web server | Suite size today | Notes                                                  |
+|-----------------|------------|--------|------------|------------------|--------------------------------------------------------|
+| `app-test`      | `app`      | 4      | Yes        | ~15 tests        | Playwright `webServer` starts backend + frontend       |
+| `bdd-test`      | (BDD)      | 2      | Yes        | ~15 scenarios    | Runs `bddgen` before `playwright test`                 |
+| `external-test` | `external` | 10     | No         | 1000 tests       | `SKIP_WEB_SERVER=1`; the Wikipedia validation runs     |
+
+Each matrix uploads `allure-results-<suite>-shard-N` artifacts. The `report-image` job depends on all three, merges every shard's results into `allure-results{,-bdd,-external}/`, stages them, and builds the Docker image (uploaded as `allure-report-image` tarball, 7-day retention). Allure trend history persists across runs via `actions/cache` on `docker/history/`.
+
+Shared setup (Node, deps, browser cache) lives in a composite action at [`.github/actions/setup-playwright/`](.github/actions/setup-playwright/action.yml) so each matrix job stays under 20 lines.
 
 To run the image locally from the CI artifact:
 
@@ -214,6 +224,8 @@ To run the image locally from the CI artifact:
 docker load -i allure-report-image.tar
 docker run --rm -p 8081:80 retailflow/allure-report:local
 ```
+
+**Tuning shard counts**: increase per-suite shard count when one suite's wall-clock exceeds ~10 min. Playwright shards by test file count, so very long files balance poorly — split them or bump shard count.
 
 ## Claude skills
 
