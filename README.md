@@ -144,6 +144,14 @@ npm run allure:generate && npm run allure:open
 
 The Allure report tree is grouped by `epic / feature / severity`. POM specs use the `tagSuite()` helper (`tests/support/allure.ts`); BDD scenarios get the same labels from Gherkin tags.
 
+### Failure categories
+
+`docker/categories.json` declares regex-matched buckets that show up in the report's **Categories** tab. The current buckets cover real failure patterns from this repo: selector/locator failures, assertion timeouts, the shared-backend "insufficient funds" race, auth failures, network errors, browser launch issues, and BDD/fixture infra failures.
+
+The Categories tab is the **failure-type axis**, perpendicular to the **Owners** tab (the squad axis). Together they let you ask "which squad owns the broken-selector failures this week?" by cross-referencing the two.
+
+`docker/stage-results.sh` copies `categories.json` into each suite's staged results dir, so the generated app/bdd/external reports all share the same bucket definitions.
+
 ### Squad ownership
 
 Every test carries the squad that owns its feature. `tests/support/squads.ts` is the single source of truth:

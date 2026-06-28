@@ -42,6 +42,10 @@ stage() {
     cp -R "$HISTORY/$dest/." "$STAGING/$dest/history/"
     echo "        injected prior history (${RETENTION_DAYS}-day window)"
   fi
+  # Inject categories.json so Allure's Categories tab groups failures by type.
+  if [ -f "$ROOT/docker/categories.json" ]; then
+    cp "$ROOT/docker/categories.json" "$STAGING/$dest/categories.json"
+  fi
 }
 
 stage allure-results          app
