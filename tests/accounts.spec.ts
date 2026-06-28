@@ -1,13 +1,14 @@
 import { test } from './fixtures';
 import { tagSuite } from './support/allure';
+import { makeAccountName } from './support/factories';
 
 test.describe('Accounts', () => {
   tagSuite({ epic: 'Banking', feature: 'Accounts', severity: 'critical' });
 
-  test('user can open a new savings account', async ({ authedPage, accountsPage }) => {
+  test('user can open a new savings account', async ({ authedPage, accountsPage }, testInfo) => {
     void authedPage;
     await accountsPage.goto();
-    const name = `Vacation ${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const name = makeAccountName(testInfo, 'savings');
     await accountsPage.openAccount('savings', name);
     await accountsPage.expectSuccess(name);
     await accountsPage.expectAccountListed(name);

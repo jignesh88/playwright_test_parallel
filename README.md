@@ -87,6 +87,35 @@ Mechanics:
 
 Migration of remaining specs from `authedPage` → `freshPage` is incremental — change one spec at a time when its flakiness earns the swap.
 
+### Test data factories
+
+At 1000 tests the same three callsites with `Date.now()` / `Math.random()` literals turn into 30 — every domain field change touches every spec. `tests/support/factories.ts` provides one factory per input-shaped entity, with sensible happy-path defaults and partial overrides:
+
+```ts
+import { makeLoan, makeAccountName, makePayment } from './support/factories';
+
+test('small loan is auto-approved', async ({ authedPage, loansPage }, testInfo) => {
+  void authedPage;
+  await loansPage.goto();
+  await loansPage.apply(makeLoan(testInfo, { amount: 2_000 }));
+  await loansPage.expectSuccess('approved');
+});
+
+test('user can open a savings account', async ({ authedPage, accountsPage }, testInfo) => {
+  void authedPage;
+  await accountsPage.goto();
+  const name = makeAccountName(testInfo, 'savings');
+  await accountsPage.openAccount('savings', name);
+  await accountsPage.expectAccountListed(name);
+});
+```
+
+Rules:
+- Factories return INPUT shapes ready for page-object methods (`LoansPage.apply`, etc.). They mirror PO method signatures.
+- Uniqueness comes from a seeded RNG keyed off `testInfo.titlePath`. Same test path → same generated values across runs (retries reuse them; parallel tests across files never collide).
+- One function per entity, no `Factory<T>` abstraction, no fluent builders. `makeLoan(testInfo, { amount: 200_000 })` reads better than `loanBuilder.withAmount(...).build()`.
+- Migration is opt-in — existing inline literals keep working.
+
 ### BDD (playwright-bdd)
 
 ```bash
