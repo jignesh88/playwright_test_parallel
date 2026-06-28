@@ -36,7 +36,8 @@ export default defineConfig({
     headless: true,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    // BDD suite has no per-test video toggle (context creation timing); traces cover it.
+    video: 'off',
   },
   projects: [
     {
