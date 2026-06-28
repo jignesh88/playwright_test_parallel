@@ -1,0 +1,43 @@
+name: Setup Playwright
+description: Install Node, project deps (root + backend + frontend), and Playwright browsers (cached).
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'npm'
+        cache-dependency-path: |
+          package-lock.json
+          backend/package-lock.json
+          frontend/package-lock.json
+
+    - name: Install root dependencies
+      shell: bash
+      run: npm ci
+
+    - name: Install backend dependencies
+      shell: bash
+      run: npm --prefix backend ci
+
+    - name: Install frontend dependencies
+      shell: bash
+      run: npm --prefix frontend ci
+
+    - name: Cache Playwright browsers
+      id: pw-cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+
+    - name: Install Playwright browsers
+      if: steps.pw-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: npx playwright install --with-deps chromium
+
+    - name: Install system deps for cached browsers
+      if: steps.pw-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: npx playwright install-deps chromium
