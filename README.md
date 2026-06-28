@@ -66,6 +66,24 @@ Design rules:
 - Shared test data (demo credentials, seed account names) lives in `tests/support/testData.ts`.
 - Specs reference page objects, never `data-testid` directly.
 
+### Artifacts on failure: traces always, videos on smoke only
+
+Defaults across both configs: `trace: 'retain-on-failure'`, `screenshot: 'only-on-failure'`, **`video: 'off'`**. Traces give equivalent forensic detail at a fraction of the size — at 1000 tests with even a 1% real-fail rate, video webms would add ~500 MB per CI run.
+
+To opt a spec into video capture, call `markSmoke()` at **file top** (Playwright requires the video override at module scope because it forces a new worker):
+
+```ts
+import { markSmoke } from './support/smoke';
+markSmoke();                              // file-top, before any describe
+
+test.describe('Login', () => {
+  tagSuite({ epic: 'Banking', feature: 'Authentication', severity: 'blocker' });
+  // tests...
+});
+```
+
+`markSmoke()` also adds a `@smoke` Allure tag + Playwright annotation, so smoke tests are filterable in the report and via `--grep`. The BDD suite has no per-test video toggle (context creation timing); traces cover it.
+
 ### BDD (playwright-bdd)
 
 ```bash

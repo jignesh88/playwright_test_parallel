@@ -1,6 +1,9 @@
 import { test, expect } from './fixtures';
 import { DEMO_USER } from './support/testData';
 import { tagSuite } from './support/allure';
+import { markSmoke } from './support/smoke';
+
+markSmoke();
 
 test.describe('Login', () => {
   tagSuite({ epic: 'Banking', feature: 'Authentication', severity: 'blocker' });

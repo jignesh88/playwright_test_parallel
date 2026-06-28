@@ -29,7 +29,9 @@ export default defineConfig({
     headless: true,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    // Video defaults OFF. Opt in per spec with markSmoke() (tests/support/smoke.ts)
+    // — traces give equivalent forensic detail at a fraction of the size.
+    video: 'off',
   },
   projects: [
     {
