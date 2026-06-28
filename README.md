@@ -185,10 +185,17 @@ npm run report:docker:logs
 
 ## CI
 
-`.github/workflows/playwright.yml`:
-- Test matrix runs the `external` project across 10 shards, uploading per-shard `allure-results-external-shard-N` artifacts.
-- A downstream `report-image` job merges shards, stages results, builds the Allure-report Docker image, and uploads the image as an `allure-report-image` tarball artifact (7-day retention).
-- Allure trend history persists across pipeline runs via `actions/cache` on `docker/history/`.
+`.github/workflows/playwright.yml` runs three independent test matrices in parallel, then builds a single Allure report image from their combined results:
+
+| Job             | Project    | Shards | Web server | Suite size today | Notes                                                  |
+|-----------------|------------|--------|------------|------------------|--------------------------------------------------------|
+| `app-test`      | `app`      | 4      | Yes        | ~15 tests        | Playwright `webServer` starts backend + frontend       |
+| `bdd-test`      | (BDD)      | 2      | Yes        | ~15 scenarios    | Runs `bddgen` before `playwright test`                 |
+| `external-test` | `external` | 10     | No         | 1000 tests       | `SKIP_WEB_SERVER=1`; the Wikipedia validation runs     |
+
+Each matrix uploads `allure-results-<suite>-shard-N` artifacts. The `report-image` job depends on all three, merges every shard's results into `allure-results{,-bdd,-external}/`, stages them, and builds the Docker image (uploaded as `allure-report-image` tarball, 7-day retention). Allure trend history persists across runs via `actions/cache` on `docker/history/`.
+
+Shared setup (Node, deps, browser cache) lives in a composite action at [`.github/actions/setup-playwright/`](.github/actions/setup-playwright/action.yml) so each matrix job stays under 20 lines.
 
 To run the image locally from the CI artifact:
 
@@ -196,6 +203,8 @@ To run the image locally from the CI artifact:
 docker load -i allure-report-image.tar
 docker run --rm -p 8081:80 retailflow/allure-report:local
 ```
+
+**Tuning shard counts**: increase per-suite shard count when one suite's wall-clock exceeds ~10 min. Playwright shards by test file count, so very long files balance poorly — split them or bump shard count.
 
 ## Claude skills
 
