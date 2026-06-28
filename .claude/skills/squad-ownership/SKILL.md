@@ -154,17 +154,32 @@ console.log('squadEmail:', j.parameters?.find(p => p.name==='squadEmail')?.value
 
 Then `npm run allure:serve` — the Owners view lists every squad with its tests under it, and clicking into a test shows the squad email on the detail page.
 
-## Why not `categories.json`?
+## Failure notifications (the "B half")
 
-Allure Categories bucket failures by `messageRegex` / `traceRegex` — that's a failure-type axis, not an ownership axis. The built-in Owners view (driven by `allure.owner()`) already does ownership grouping cleanly. Only add a `categories.json` when you want to bucket *failures by kind* (timeouts vs. selector errors) *within* each squad — that's a real second axis, not a duplicate.
+When CI fails, surface which squad owns each failing test. The data is already there — `allure-results/*-result.json` carries `labels[].name === 'owner'` plus `parameters[].name === 'squadEmail'`. A small post-test job reads those, groups by owner, and posts to GitHub + (optionally) Slack:
+
+1. `scripts/squad-failure-report.ts` — reads one or more allure-results dirs, groups failures by owner, emits Markdown to stdout.
+2. CI `failure-report` job runs `if: ${{ failure() }}` (skips on green) and:
+   - Pipes the report into `$GITHUB_STEP_SUMMARY` (always — visible on the run page).
+   - Posts the same report as a PR comment via `gh pr comment` (only on `pull_request` runs).
+   - Posts a Slack message via `secrets.SLACK_WEBHOOK_URL` if the secret is set (opt-in per repo).
+
+Design rules to preserve:
+
+- **Read failures, don't run tests.** This job consumes `allure-results-*` artifacts; it doesn't re-run anything.
+- **`failure()` gate, not `always()`.** Downloading artifacts on every green run is wasteful at 1000 tests.
+- **Two channels by default**, both zero-config: step summary + PR comment. Slack is the opt-in third for teams that want push notifications.
+- **No per-squad routing rules** at small scale. List every squad with failures; the PR author triages.
+- **Don't auto-create GitHub issues.** Closed issues reopen on transient flakes — that creates more noise than it cures.
+- **One squad's failures stay in one section.** Don't sort by severity — sort alphabetically by squad name so each squad's lead can ⌘F to their section.
+
+## Why not `categories.json` for ownership?
+
+Allure Categories bucket failures by `messageRegex` / `traceRegex` — that's a failure-type axis, not an ownership axis. The built-in Owners view (driven by `allure.owner()`) already does ownership grouping cleanly. Categories DO add value as a perpendicular axis (selector failures vs. timeouts vs. backend errors) — see the `allure-docker-reports` skill.
 
 ## Adding a feature or squad
 
 1. (If new squad) Add an entry to `SQUADS` and extend `SquadId`.
 2. Add a row to `FEATURE_OWNERSHIP`: feature name → squad id.
 
-That's it. Both POM and BDD flows pick it up on next run.
-
-## Not in scope here
-
-- Routing failure notifications to squad emails. That's a separate concern (CI step that reads `allure-results/*-result.json`, groups failures by `owner` label, sends mail/Slack/issues). The data is in the result JSONs — the notification skill, when added, will read it from there.
+That's it. Both POM and BDD flows pick it up on next run, and the failure-report job's grouping picks them up automatically.

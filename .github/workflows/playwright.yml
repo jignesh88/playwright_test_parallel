@@ -121,14 +121,99 @@ jobs:
           path: test-results/
           retention-days: 7
 
-  report-image:
-<<<<<<< HEAD
-    name: Build & push Allure report image
-    needs: test
-=======
-    name: Build Allure report Docker image
+  failure-report:
+    name: Squad failure report
     needs: [app-test, bdd-test, external-test]
->>>>>>> origin/main
+    # Run only when at least one matrix job failed (or was cancelled mid-run).
+    # `success()` would skip; `always()` would run on green and waste artifact downloads.
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Download all allure-results artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          pattern: allure-results-*
+
+      - name: Merge shards into allure-results-{app,bdd,external}
+        run: |
+          set -euo pipefail
+          mkdir -p allure-results allure-results-bdd allure-results-external
+          shopt -s nullglob
+          for dir in artifacts/allure-results-app-shard-*;      do cp -R "$dir"/. allure-results/;          done
+          for dir in artifacts/allure-results-bdd-shard-*;      do cp -R "$dir"/. allure-results-bdd/;      done
+          for dir in artifacts/allure-results-external-shard-*; do cp -R "$dir"/. allure-results-external/; done
+
+      - name: Generate squad failure report
+        id: report
+        run: |
+          set -euo pipefail
+          npx tsx scripts/squad-failure-report.ts \
+            allure-results allure-results-bdd allure-results-external \
+            > /tmp/squad-failure-report.md
+          {
+            echo "report<<EOF"
+            cat /tmp/squad-failure-report.md
+            echo
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post report to job summary
+        run: cat /tmp/squad-failure-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post report as PR comment
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh pr comment "$PR_NUMBER" \
+            --body-file /tmp/squad-failure-report.md \
+            --repo "${{ github.repository }}"
+
+      - name: Post report to Slack (optional)
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        if: ${{ env.SLACK_WEBHOOK_URL != '' }}
+        run: |
+          set -euo pipefail
+          # Slack payload: header + the rendered markdown as a mrkdwn block.
+          # Truncate if it exceeds Slack's ~3000 char block limit.
+          report="$(head -c 2800 /tmp/squad-failure-report.md)"
+          payload="$(jq -n \
+            --arg run "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --arg report "$report" \
+            '{
+              text: "Test failures grouped by squad",
+              blocks: [
+                { type: "section",
+                  text: { type: "mrkdwn", text: $report } },
+                { type: "context",
+                  elements: [ { type: "mrkdwn", text: ("<" + $run + "|View run>") } ] }
+              ]
+            }')"
+          curl -fsS -X POST -H 'Content-Type: application/json' \
+            --data "$payload" "$SLACK_WEBHOOK_URL"
+
+  report-image:
+    name: Build & push Allure report image
+    needs: [app-test, bdd-test, external-test]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
