@@ -187,15 +187,25 @@ npm run report:docker:logs
 
 `.github/workflows/playwright.yml`:
 - Test matrix runs the `external` project across 10 shards, uploading per-shard `allure-results-external-shard-N` artifacts.
-- A downstream `report-image` job merges shards, stages results, builds the Allure-report Docker image, and uploads the image as an `allure-report-image` tarball artifact (7-day retention).
+- A downstream `report-image` job merges shards, stages results, builds the Allure-report Docker image, and **pushes it to GHCR** (GitHub Container Registry).
 - Allure trend history persists across pipeline runs via `actions/cache` on `docker/history/`.
 
-To run the image locally from the CI artifact:
+### Pulling the report image from GHCR
+
+Every CI run pushes an immutable SHA-tagged image. Builds on `main` also move the `:latest` tag.
 
 ```bash
-docker load -i allure-report-image.tar
-docker run --rm -p 8081:80 retailflow/allure-report:local
+# Latest image from the main branch:
+docker pull ghcr.io/jignesh88/playwright_test_parallel/allure-report:latest
+docker run --rm -p 8081:80 ghcr.io/jignesh88/playwright_test_parallel/allure-report:latest
+
+# Or pin to a specific commit:
+docker pull ghcr.io/jignesh88/playwright_test_parallel/allure-report:sha-<short>
 ```
+
+First-time pull from a private repo requires `docker login ghcr.io` with a PAT that has `read:packages` scope (or `gh auth token` piped to `docker login`). To make the package public, go to the package's GitHub page → Package settings → Change visibility — this is a one-time per-repo step.
+
+Each successful CI run's job summary prints the exact `docker pull` command for that build.
 
 ## Claude skills
 

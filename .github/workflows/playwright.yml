@@ -80,11 +80,16 @@ jobs:
           retention-days: 7
 
   report-image:
-    name: Build Allure report Docker image
+    name: Build & push Allure report image
     needs: test
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}/allure-report
     steps:
       - uses: actions/checkout@v4
 
@@ -132,26 +137,68 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Build report image
+      - name: Lower-case the image name
+        # GHCR rejects uppercase repo segments; force the whole tag lowercase.
+        id: lcimg
+        run: echo "image=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: tags
+        run: |
+          set -euo pipefail
+          short="$(echo "${{ github.sha }}" | cut -c1-7)"
+          sha_tag="${{ steps.lcimg.outputs.image }}:sha-$short"
+          latest_tag=""
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            latest_tag="${{ steps.lcimg.outputs.image }}:latest"
+          fi
+          # Multi-line value for the tags input — blank lines are ignored by
+          # docker/build-push-action, so an empty latest is safe.
+          {
+            echo "list<<EOF"
+            echo "$sha_tag"
+            [ -n "$latest_tag" ] && echo "$latest_tag"
+            echo "EOF"
+            echo "sha=$sha_tag"
+            echo "latest=$latest_tag"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build & push report image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/allure-report.Dockerfile
-          tags: retailflow/allure-report:local
-          load: true
-          push: false
-
-      - name: Export image to tarball
-        run: docker save retailflow/allure-report:local -o /tmp/allure-report-image.tar
+          push: true
+          tags: ${{ steps.tags.outputs.list }}
+          load: false
 
       - name: Extract fresh history for next run's cache
+        # Pull the just-pushed image and extract its history dir so the next
+        # CI run's stage script can inject the rolling-7-day trend.
         env:
-          ALLURE_REPORT_IMAGE: retailflow/allure-report:local
-        run: bash docker/extract-history.sh
+          ALLURE_REPORT_IMAGE: ${{ steps.tags.outputs.sha }}
+        run: |
+          set -euo pipefail
+          docker pull "$ALLURE_REPORT_IMAGE"
+          bash docker/extract-history.sh
 
-      - name: Upload report image tarball
-        uses: actions/upload-artifact@v4
-        with:
-          name: allure-report-image
-          path: /tmp/allure-report-image.tar
-          retention-days: 7
+      - name: Summary
+        run: |
+          {
+            echo "### Allure report image"
+            echo ""
+            echo "Pushed to GHCR:"
+            echo ""
+            echo '```'
+            echo "docker pull ${{ steps.tags.outputs.sha }}"
+            [ -n "${{ steps.tags.outputs.latest }}" ] && echo "docker pull ${{ steps.tags.outputs.latest }}"
+            echo "docker run --rm -p 8081:80 ${{ steps.tags.outputs.sha }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
