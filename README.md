@@ -62,9 +62,30 @@ npm run test:all        # both projects
 
 Design rules:
 - One **page object** per screen under `tests/pages/`. Selectors (`data-testid`) live **only** here.
-- A `tests/fixtures.ts` extends Playwright's `test` with page-object fixtures + an `authedPage` fixture that signs in the demo user once per test.
+- A `tests/fixtures.ts` extends Playwright's `test` with page-object fixtures + two auth fixtures:
+  - `authedPage` — signs in as the shared `demo` user. Kept for back-compat.
+  - `freshPage` / `freshUser` — mints an ephemeral user per test via `POST /api/_test/users`. **Use this for new tests.**
 - Shared test data (demo credentials, seed account names) lives in `tests/support/testData.ts`.
 - Specs reference page objects, never `data-testid` directly.
+
+### Per-test backend isolation
+
+The in-memory backend is shared across all workers, so two tests using the same user can step on each other (settings race, balance drain). The `freshPage` / `freshUser` fixtures eliminate this: each test gets its own user with seeded checking + savings accounts.
+
+```ts
+test('user can enable SMS and persist it', async ({ freshPage, settingsPage }) => {
+  void freshPage;        // logged in as a fresh user; localStorage primed
+  await settingsPage.goto();
+  // ...
+});
+```
+
+Mechanics:
+- `seedFor(testInfo)` hashes the test's title path to a stable-but-unique username, so retries reuse the same user (cleaner Allure history) while parallel tests never collide.
+- `POST /api/_test/users` is only mounted when `NODE_ENV !== 'production'`.
+- BDD scenarios opt in with `Given I am signed in as a fresh user` (the existing `Given I am signed in as the demo user` step is unchanged).
+
+Migration of remaining specs from `authedPage` → `freshPage` is incremental — change one spec at a time when its flakiness earns the swap.
 
 ### BDD (playwright-bdd)
 
@@ -185,10 +206,24 @@ npm run report:docker:logs
 
 ## CI
 
+<<<<<<< HEAD
 `.github/workflows/playwright.yml`:
 - Test matrix runs the `external` project across 10 shards, uploading per-shard `allure-results-external-shard-N` artifacts.
 - A downstream `report-image` job merges shards, stages results, builds the Allure-report Docker image, and **pushes it to GHCR** (GitHub Container Registry).
 - Allure trend history persists across pipeline runs via `actions/cache` on `docker/history/`.
+=======
+`.github/workflows/playwright.yml` runs three independent test matrices in parallel, then builds a single Allure report image from their combined results:
+
+| Job             | Project    | Shards | Web server | Suite size today | Notes                                                  |
+|-----------------|------------|--------|------------|------------------|--------------------------------------------------------|
+| `app-test`      | `app`      | 4      | Yes        | ~15 tests        | Playwright `webServer` starts backend + frontend       |
+| `bdd-test`      | (BDD)      | 2      | Yes        | ~15 scenarios    | Runs `bddgen` before `playwright test`                 |
+| `external-test` | `external` | 10     | No         | 1000 tests       | `SKIP_WEB_SERVER=1`; the Wikipedia validation runs     |
+
+Each matrix uploads `allure-results-<suite>-shard-N` artifacts. The `report-image` job depends on all three, merges every shard's results into `allure-results{,-bdd,-external}/`, stages them, and builds the Docker image (uploaded as `allure-report-image` tarball, 7-day retention). Allure trend history persists across runs via `actions/cache` on `docker/history/`.
+
+Shared setup (Node, deps, browser cache) lives in a composite action at [`.github/actions/setup-playwright/`](.github/actions/setup-playwright/action.yml) so each matrix job stays under 20 lines.
+>>>>>>> origin/main
 
 ### Pulling the report image from GHCR
 
@@ -203,9 +238,13 @@ docker run --rm -p 8081:80 ghcr.io/jignesh88/playwright_test_parallel/allure-rep
 docker pull ghcr.io/jignesh88/playwright_test_parallel/allure-report:sha-<short>
 ```
 
+<<<<<<< HEAD
 First-time pull from a private repo requires `docker login ghcr.io` with a PAT that has `read:packages` scope (or `gh auth token` piped to `docker login`). To make the package public, go to the package's GitHub page → Package settings → Change visibility — this is a one-time per-repo step.
 
 Each successful CI run's job summary prints the exact `docker pull` command for that build.
+=======
+**Tuning shard counts**: increase per-suite shard count when one suite's wall-clock exceeds ~10 min. Playwright shards by test file count, so very long files balance poorly — split them or bump shard count.
+>>>>>>> origin/main
 
 ## Claude skills
 

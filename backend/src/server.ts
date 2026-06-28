@@ -129,6 +129,55 @@ app.post('/api/login', (req: Request, res: Response) => {
   res.json({ token, fullName: user.fullName });
 });
 
+// Test-only endpoint: mint an ephemeral user with seed accounts so each test
+// owns its own backend state. Mounted only outside production.
+if (process.env.NODE_ENV !== 'production') {
+  app.post('/api/_test/users', (req: Request, res: Response) => {
+    const body = req.body ?? {};
+    const randomId = Math.random().toString(36).slice(2, 10);
+    const username = String(body.username ?? `test-${randomId}`).slice(0, 60);
+    if (users[username]) {
+      return res.status(409).json({ error: `User ${username} already exists` });
+    }
+    const password = String(body.password ?? `pw-${randomId}`);
+    const fullName = String(body.fullName ?? `Test User ${randomId}`).slice(0, 60);
+    const seedKinds: AccountKind[] = Array.isArray(body.seedAccounts) && body.seedAccounts.length
+      ? body.seedAccounts.filter((k: unknown): k is AccountKind => k === 'checking' || k === 'savings')
+      : ['checking', 'savings'];
+
+    const accounts: BankAccount[] = seedKinds.map((kind, i) => ({
+      id: `a${i + 1}`,
+      kind,
+      name: kind === 'checking' ? 'Everyday Checking' : 'Rainy Day Savings',
+      balance: kind === 'checking' ? 1000 : 5000,
+    }));
+
+    const now = new Date().toISOString();
+    const transactions: Transaction[] = accounts.map((a, i) => ({
+      id: `t${i}`,
+      accountId: a.id,
+      type: 'credit',
+      amount: a.balance,
+      description: 'Opening balance',
+      date: now,
+      balanceAfter: a.balance,
+    }));
+
+    users[username] = {
+      username,
+      password,
+      fullName,
+      accounts,
+      transactions,
+      settings: { emailEnabled: false, smsEnabled: false, marketingEnabled: false },
+      loans: [],
+    };
+
+    const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '1h' });
+    res.status(201).json({ username, password, fullName, token, accounts });
+  });
+}
+
 app.get('/api/account', auth, (req: AuthedRequest, res: Response) => {
   const user = currentUser(req);
   const totalBalance = user.accounts.reduce((sum, a) => sum + a.balance, 0);

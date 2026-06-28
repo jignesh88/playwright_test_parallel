@@ -8,53 +8,97 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
-    name: Shard ${{ matrix.shard }}/${{ strategy.job-total }}
+  app-test:
+    name: App ${{ matrix.shard }}/${{ strategy.job-total }}
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-playwright
+      - name: Run app suite
+        run: npx playwright test --project=app --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        env:
+          CI: 'true'
+          PLAYWRIGHT_HEADLESS: '1'
+      - name: Upload allure-results (app)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-app-shard-${{ matrix.shard }}
+          path: allure-results/
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Upload Playwright HTML report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-app-shard-${{ matrix.shard }}
+          path: playwright-report/
+          retention-days: 7
+      - name: Upload traces (failures only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-app-shard-${{ matrix.shard }}
+          path: test-results/
+          retention-days: 7
+
+  bdd-test:
+    name: BDD ${{ matrix.shard }}/${{ strategy.job-total }}
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-playwright
+      - name: Generate BDD specs
+        run: npx bddgen --config=playwright.bdd.config.ts test
+      - name: Run BDD suite
+        run: npx playwright test --config=playwright.bdd.config.ts --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        env:
+          CI: 'true'
+          PLAYWRIGHT_HEADLESS: '1'
+      - name: Upload allure-results (bdd)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-bdd-shard-${{ matrix.shard }}
+          path: allure-results-bdd/
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Upload Playwright HTML report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-bdd-shard-${{ matrix.shard }}
+          path: playwright-report-bdd/
+          retention-days: 7
+
+  external-test:
+    name: External ${{ matrix.shard }}/${{ strategy.job-total }}
     timeout-minutes: 30
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: |
-            package-lock.json
-            backend/package-lock.json
-            frontend/package-lock.json
-
-      - name: Install root dependencies
-        run: npm ci
-
-      - name: Cache Playwright browsers
-        id: pw-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
-
-      - name: Install Playwright browsers
-        if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
-
-      - name: Install system deps for cached browsers
-        if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
-
-      - name: Run Playwright tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+      - uses: ./.github/actions/setup-playwright
+      - name: Run external suite
         run: npx playwright test --project=external --shard=${{ matrix.shard }}/${{ strategy.job-total }}
         env:
           CI: 'true'
           PLAYWRIGHT_HEADLESS: '1'
           SKIP_WEB_SERVER: '1'
-
-      - name: Upload allure-results (external suite)
+      - name: Upload allure-results (external)
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
@@ -62,26 +106,29 @@ jobs:
           path: allure-results/
           retention-days: 7
           if-no-files-found: ignore
-
-      - name: Upload HTML report
+      - name: Upload Playwright HTML report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-shard-${{ matrix.shard }}
+          name: playwright-report-external-shard-${{ matrix.shard }}
           path: playwright-report/
           retention-days: 7
-
-      - name: Upload trace + screenshots
+      - name: Upload traces (failures only)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-traces-shard-${{ matrix.shard }}
+          name: playwright-traces-external-shard-${{ matrix.shard }}
           path: test-results/
           retention-days: 7
 
   report-image:
+<<<<<<< HEAD
     name: Build & push Allure report image
     needs: test
+=======
+    name: Build Allure report Docker image
+    needs: [app-test, bdd-test, external-test]
+>>>>>>> origin/main
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -107,8 +154,6 @@ jobs:
         uses: actions/cache@v4
         with:
           path: docker/history
-          # Save key includes today's date so each day writes a fresh entry;
-          # restore-keys allows reuse of any entry from the past week.
           key: allure-history-${{ steps.hist.outputs.date }}
           restore-keys: |
             allure-history-
@@ -118,19 +163,19 @@ jobs:
           set -euo pipefail
           mkdir -p allure-results allure-results-bdd allure-results-external
           shopt -s nullglob
-          for dir in artifacts/allure-results-external-shard-*; do
-            cp -R "$dir"/. allure-results-external/
-          done
           for dir in artifacts/allure-results-app-shard-*; do
             cp -R "$dir"/. allure-results/
           done
           for dir in artifacts/allure-results-bdd-shard-*; do
             cp -R "$dir"/. allure-results-bdd/
           done
+          for dir in artifacts/allure-results-external-shard-*; do
+            cp -R "$dir"/. allure-results-external/
+          done
           echo "Merged counts:"
-          ls allure-results          2>/dev/null | wc -l
-          ls allure-results-bdd      2>/dev/null | wc -l
-          ls allure-results-external 2>/dev/null | wc -l
+          echo "  app:      $(ls allure-results          2>/dev/null | wc -l)"
+          echo "  bdd:      $(ls allure-results-bdd      2>/dev/null | wc -l)"
+          echo "  external: $(ls allure-results-external 2>/dev/null | wc -l)"
 
       - name: Stage results for Docker build
         run: bash docker/stage-results.sh
